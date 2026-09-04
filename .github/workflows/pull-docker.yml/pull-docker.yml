@@ -1,0 +1,85 @@
+name: Pull Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: '镜像名称 (czkawka-cn, krokiet-cn, all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - czkawka-cn
+          - krokiet-cn
+      tag:
+        description: '镜像标签 (默认: latest)'
+        required: false
+        default: 'latest'
+      force_update:
+        description: '强制更新已存在的镜像'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  pull-image:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: ${{ fromJSON(github.event.inputs.image == 'all' || github.event.inputs.image == '' || github.event.inputs.image == null || github.event.inputs.image == 'null' || github.event.inputs.image == 'undefined' || github.event.inputs.image == '""' || github.event.inputs.image == "''" || github.event.inputs.image == 'None' || github.event.inputs.image == 'none' || tojson(true)) && tojson(['czkawka-cn', 'krokiet-cn']) || tojson([github.event.inputs.image]) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install -y skopeo
+
+      - name: Pull Docker image
+        env:
+          IMAGE: ${{ matrix.image }}
+          TAG: ${{ github.event.inputs.tag || 'latest' }}
+          FORCE_UPDATE: ${{ github.event.inputs.force_update }}
+        run: |
+          IMAGE_NAME="${IMAGE}"
+          TAG="${TAG}"
+          OUTPUT_DIR="images/${IMAGE_NAME}"
+          FORCE="${FORCE_UPDATE:-false}"
+          if [ -f "${OUTPUT_DIR}/manifest.json" ] && [ "${FORCE}" != "true" ]; then
+            echo "Image ${IMAGE_NAME}:${TAG} already exists, skip."
+            exit 0
+          fi
+          echo "Pulling docker.io/jlesage/${IMAGE_NAME}:${TAG}..."
+          mkdir -p "${OUTPUT_DIR}"
+          skopeo copy \
+            --src docker://docker.io/jlesage/${IMAGE_NAME}:${TAG} \
+            --dest dir://${OUTPUT_DIR} \
+            docker.io/jlesage/${IMAGE_NAME}:${TAG}
+          echo "Saved to ${OUTPUT_DIR}"
+          ls -la "${OUTPUT_DIR}"
+
+      - name: Generate checksum
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          sha256sum images/${IMAGE}/manifest.json > images/${IMAGE}/sha256sum.txt 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.image }}-image
+          path: images/${{ matrix.image }}
+          retention-days: 7
+
+  summarize:
+    runs-on: ubuntu-latest
+    needs: pull-image
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Docker 镜像拉取完成" >> $GITHUB_STEP_SUMMARY
+          echo "- czkawka-cn: ${{ needs.pull-image.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- krokiet-cn: ${{ needs.pull-image.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "下载 artifacts 后使用 \`scripts/import_image.sh\` 导入到软路由" >> $GITHUB_STEP_SUMMARY
+
