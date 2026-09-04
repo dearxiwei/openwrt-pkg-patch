@@ -1,7 +1,0 @@
-images/
-*.tar
-*.tar.gz
-*.oci/
-.sha256sum.txt
-.DS_Store
-Thumbs.db
