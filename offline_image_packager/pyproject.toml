@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "offline_image_packager"
+version = "0.1.0"
+description = "Pull Docker/OCI images without Docker and package as offline archives (IPv4 only)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+oip = "offline_image_packager.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
